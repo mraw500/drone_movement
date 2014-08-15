@@ -1,0 +1,15 @@
+<package>
+  <description brief="drone_movement">
+
+     drone_movement
+
+  </description>
+  <author>hee502</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/drone_movement</url>
+  <depend package="roscpp"/>
+	<depend package="ardrone_autonomy"/>
+</package>
+
+
