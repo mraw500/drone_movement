@@ -3,8 +3,13 @@
 //v1.0									     																								 //
 //First creation							    																					 //
 //Huseyin Emre Erdem																										     //
+//Edgar Buchanan																														 //
 //15.08.2014																														     //
 ///////////////////////////////////////////////////////////////////////////////
+
+//Pattern recognition node added
+//Error compensation implemented
+//Timing between commands modified
 
 #include "ros/ros.h"
 #include "std_msgs/String.h"
@@ -13,7 +18,7 @@
 #include "std_msgs/Duration.h"
 #include "pos.h"
 #include "UInt8.h"
-#include "ardrone_autonomy/Navdata.h"//For tag detection
+#include "Navdata.h"//For tag detection
 #include <cmath>
 #include <cstdio>
 
@@ -23,10 +28,11 @@ float fTargetPosY;
 float fYawAngle;
 int iInitilizeFlag;
 int iPassingPoint;
+int iPatternFlag;
 
 /*Prototypes*/
 void getTargetPos(const drone_movement::pos posReceived);//Processes data read from drone_target_pos topic
-//void getPattern(const ardrone_autonomy::Navdata& navdataReceived);//Processes pattern recognition data read from /ardrone/navdata topic
+void getPattern(const ardrone_autonomy::Navdata& navdataReceived);//Processes pattern recognition data read from /ardrone/navdata topic
 
 /*Main function*/
 int main(int argc, char **argv)
@@ -42,8 +48,7 @@ int main(int argc, char **argv)
 	ros::Publisher drone_target_reached_pub = n.advertise<drone_movement::UInt8>("drone_target_reached", 1); //to publish message saying drone_target_reached to topic
 	/*Subscribers*/
 	ros::Subscriber targetSub = n.subscribe("i90_current_pos", 1, getTargetPos);//To collect the target position published by i90_sensor_board
-	//ros::Subscriber targetSub = n.subscribe("drone_target_pos", 1, getTargetPos);//To collect the target position published by i90_sensor_board
-	//ros::Subscriber patternSub = n.subscribe("/ardrone/navdata", 1, getPattern);//To collect the target position published by i90_sensor_board
+	ros::Subscriber patternSub = n.subscribe("/ardrone/navdata", 1, getPattern);//To collect the target position published by i90_sensor_board
 
 	d.sleep(); //Wait for 2 seconds to allow publishers & subscribers to get ready
 
@@ -55,6 +60,7 @@ int main(int argc, char **argv)
 	drone_movement::UInt8 message;
 
 	iInitilizeFlag = 0;
+	iPatternFlag = 0;
 
   while(ros::ok()){
 		message.data = count++;
@@ -120,15 +126,18 @@ int main(int argc, char **argv)
 			s.data = c.c_str();
 			drone_pub.publish(s);
 			d.sleep();
-			ROS_INFO("lockScaleFP!");//Inform user on the terminal
+			ROS_INFO("lockScaleFP!");//Inform user on the terminal			
+
+			/*c = "c goto 0 0 0.25 0"; //Original value First test. Error of 0.5m
+			s.data = c.c_str();
+			pthread_mutex_lock(&send_CS);
+			drone_pub.publish(s);
+			pthread_mutex_unlock(&send_CS);
+			ROS_INFO("goto 0 1.5!");//Inform user on the terminal*/
 
 			//Select passing point as starting point
 			if(iPassingPoint == 2){ 
-				//c = "c goto 0 0 0 90";		//Not working properly even with correc z value	
-				//d.sleep();				
-				//c = "c goto 2 0 0.25 90";	//Third test			
-				//c = "c goto 2 0 0.25 0";	//Second test
-				c = "c goto 0 1.5 0.25 0"; //Original value First test. Error of 0.5m
+				c = "c goto 0 1.5 0.5 0"; //Original value First test. Error of 0.5m
 				s.data = c.c_str();
 				pthread_mutex_lock(&send_CS);
 				drone_pub.publish(s);
@@ -136,54 +145,35 @@ int main(int argc, char **argv)
 				ROS_INFO("goto 0 1.5!");//Inform user on the terminal
 			}		
 			else {
-				c = "c goto 1.5 0 0.25 0";	//Error of 1.5m
+				c = "c goto 1.5 0 0.5 0";	//Error of 1.5m
 				s.data = c.c_str();
 				pthread_mutex_lock(&send_CS);
 				drone_pub.publish(s);
 				pthread_mutex_unlock(&send_CS);
 				ROS_INFO("goto 1.5 0!");//Inform user on the terminal
 			}
-			
-			/*//Use just for go to passing point test
-			d.sleep();
-			d.sleep();
-			d.sleep();*/
 
 			//Go to target
-			sprintf(&c[0],"c goto %.2f %.2f 0.25 %.2f",fTargetPosX,fTargetPosY, fYawAngle);	
+			sprintf(&c[0],"c goto %.2f %.2f 0.75 %.2f",fTargetPosX,fTargetPosY, fYawAngle);	
 			s.data = c.c_str();
 			pthread_mutex_lock(&send_CS);
 			drone_pub.publish(s);
 			pthread_mutex_unlock(&send_CS);
 			ROS_INFO("Goto: [%f][%f]", fTargetPosX, fTargetPosY);
 			
-			/*//Use for go to target test
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();*/
-			
-			//Find pattern
-			//while(NO_PATTERN_FOUND){
-			//	LOOk_FOR_PATTERN
-			//}
-			
-
 			// Sending message to i90
 			//message.data = 1;
-			//drone_target_reached_pub.publish(message);
-			
+			//drone_target_reached_pub.publish(message);			
 
 			//Return to passing point
 			if(iPassingPoint == 2){ 
-				c = "c goto 0 1.5 0.25 0";
+				c = "c goto 0 1.5 0.5 0";
 				s.data = c.c_str();
 				drone_pub.publish(s);
 				ROS_INFO("goto 0 1.5!");//Inform user on the terminal
 			}		
 			else {
-				c = "c goto 1.5 0 0.25 0";
+				c = "c goto 1.5 0 0.5 0";
 				s.data = c.c_str();
 				drone_pub.publish(s);
 				ROS_INFO("goto 1.5 0!");//Inform user on the terminal
@@ -195,40 +185,30 @@ int main(int argc, char **argv)
 			drone_pub.publish(s);
 			ROS_INFO("goto origin!");//Inform user on the terminal
 
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
 
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			d.sleep();
-			
-			//LAnd!!
-			landPub.publish(std_msgs::Empty());//Publish landing command
+			//Land
+			landPub.publish(std_msgs::Empty());
+			//Publish landing command
 			ROS_INFO("LAND!");//Inform user
 			iInitilizeFlag = 0;
 		}
-
+	
   	ros::spinOnce();
-		//loop_rate.sleep();
   }
   return 0;
 }
-
+//iPatternFlag = 1;
 /*Processes data read from drone_target_pos topic*/
 void getTargetPos(const drone_movement::pos posReceived){
 	ROS_INFO("Target position: [%f]/t[%f]/t[%f]", posReceived.fXPos, posReceived.fYPos, posReceived.fYawAngle);
@@ -237,17 +217,22 @@ void getTargetPos(const drone_movement::pos posReceived){
  	fYawAngle = posReceived.fYawAngle;	
 	float fPassingPoint1[2] = {2,0},fPassingPoint2[2] = {0,2};
   double dDistance1, dDistance2;
-  dDistance1=sqrt(((fPassingPoint1[0] - fTargetPosX) * (fPassingPoint1[0] - fTargetPosX)) + ((fPassingPoint1[1] - fTargetPosY) * (fPassingPoint1[1] - fTargetPosY)));
+  dDistance1 = sqrt(((fPassingPoint1[0] - fTargetPosX) * (fPassingPoint1[0] - fTargetPosX)) + ((fPassingPoint1[1] - fTargetPosY) * (fPassingPoint1[1] - fTargetPosY)));
   dDistance2 = sqrt(((fPassingPoint2[0] - fTargetPosX) * (fPassingPoint2[0]-fTargetPosX)) + ((fPassingPoint2[1] - fTargetPosY) * (fPassingPoint2[1] - fTargetPosY)));
   if(dDistance1 <= dDistance2)
      iPassingPoint=1;
 	else
 		 iPassingPoint=2;
 	iInitilizeFlag = 1;
+	
+	fTargetPosX -= 1.25;
+	fTargetPosY -= 0.75;
 }
 
 /*Processes pattern recognition data read from /ardrone/navdata topic*/
 void getPattern(const ardrone_autonomy::Navdata& navdataReceived){
-	ROS_INFO("Tags detected: [%u]", navdataReceived.tags_count);
+	if(navdataReceived.tags_count > 0) iPatternFlag = 1;
+	else iPatternFlag = 0;
+	//ROS_INFO("Tags detected: [%u]", navdataReceived.tags_count);
 }
 

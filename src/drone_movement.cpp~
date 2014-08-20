@@ -14,6 +14,8 @@
 #include "pos.h"
 #include "UInt8.h"
 #include "ardrone_autonomy/Navdata.h"//For tag detection
+#include <cmath>
+#include <cstdio>
 
 /*Variables*/
 float fTargetPosX;
@@ -60,10 +62,23 @@ int main(int argc, char **argv)
 		d.sleep();
 		while (iInitilizeFlag == 1){		//Wait until receive coordinates from i90 actual position		
 			
+			c = "c setReference $POSE$"; //Set origin in robot's actual position
+			s.data = c.c_str();
+			pthread_mutex_lock(&send_CS);
+			drone_pub.publish(s);
+			pthread_mutex_unlock(&send_CS);			
+			ROS_INFO("setReference!");//Inform user on the terminal
+
+			d.sleep();			
+			
 			//Take off AR-drone
-			takeoffPub.publish(std_msgs::Empty());//Publish take0ff message
-			ROS_INFO("TAKEOFF!");//Inform user on the terminal
+			takeoffPub.publish(std_msgs::Empty());
+			ROS_INFO("TAKEOFF!");//Inform user 
+			
 			d.sleep();
+			d.sleep();
+			d.sleep();
+
 
 			//Set initial parameters
 			c = "c autoTakeOver 500 800";
@@ -71,49 +86,34 @@ int main(int argc, char **argv)
 			pthread_mutex_lock(&send_CS);
 			drone_pub.publish(s);
 			pthread_mutex_unlock(&send_CS);
-
-			d.sleep();
 			ROS_INFO("autoTakeOver!");//Inform user on the terminal
-
-			c = "c setReference $POSE$"; //Set origin in robot's actual position
-			s.data = c.c_str();
-			pthread_mutex_lock(&send_CS);
-			drone_pub.publish(s);
-			pthread_mutex_unlock(&send_CS);
-
-			d.sleep();		
-			ROS_INFO("setReference!");//Inform user on the terminal
 
 			c = "c setMaxControl 0.1";	//Limit AR-dron high speed
 			s.data = c.c_str();
 			pthread_mutex_lock(&send_CS);
 			drone_pub.publish(s);
 			pthread_mutex_unlock(&send_CS);
-
 			ROS_INFO("setMaxControl!");//Inform user on the terminal
 
-			c = "c setInitialReachDist 0.1";	//Reach target within 0.1m 
+			c = "c setInitialReachDist 0.25";	//Reach target within 0.1m 
 			s.data = c.c_str();
 			pthread_mutex_lock(&send_CS);
 			drone_pub.publish(s);
 			pthread_mutex_unlock(&send_CS);
-
 			ROS_INFO("setInitialReachDist!");//Inform user on the terminal
 
-			c = "c setStayWithinDist 0.1";		//Stay in target location within 0.1m
+			c = "c setStayWithinDist 0.25";		//Stay in target location within 0.1m
 			s.data = c.c_str();
 			pthread_mutex_lock(&send_CS);
 			drone_pub.publish(s);
 			pthread_mutex_unlock(&send_CS);
-
 			ROS_INFO("setStayWithinDist!");//Inform user on the terminal	
 
-			c = "c setStayTime 3";						//Stay in target location for 3s
+			c = "c setStayTime 1";						//Stay in target location for 3s
 			s.data = c.c_str();
 			pthread_mutex_lock(&send_CS);
 			drone_pub.publish(s);
 			pthread_mutex_unlock(&send_CS);
-
 			ROS_INFO("setStayTime!");//Inform user on the terminal	
 
 			c = "c lockScaleFP";							//Fix PTAM
@@ -122,82 +122,99 @@ int main(int argc, char **argv)
 			d.sleep();
 			ROS_INFO("lockScaleFP!");//Inform user on the terminal
 
-			c = "c goto 0 0 0.5 0";						//Increase AR-drone altitude in order avoid ground obstacles (1.45m)
+			//Select passing point as starting point
+			if(iPassingPoint == 2){ 
+				//c = "c goto 0 0 0 90";		//Not working properly even with correc z value	
+				//d.sleep();				
+				//c = "c goto 2 0 0.25 90";	//Third test			
+				//c = "c goto 2 0 0.25 0";	//Second test
+				c = "c goto 0 1.5 0.25 0"; //Original value First test. Error of 0.5m
+				s.data = c.c_str();
+				pthread_mutex_lock(&send_CS);
+				drone_pub.publish(s);
+				pthread_mutex_unlock(&send_CS);
+				ROS_INFO("goto 0 1.5!");//Inform user on the terminal
+			}		
+			else {
+				c = "c goto 1.5 0 0.25 0";	//Error of 1.5m
+				s.data = c.c_str();
+				pthread_mutex_lock(&send_CS);
+				drone_pub.publish(s);
+				pthread_mutex_unlock(&send_CS);
+				ROS_INFO("goto 1.5 0!");//Inform user on the terminal
+			}
+			
+			/*//Use just for go to passing point test
+			d.sleep();
+			d.sleep();
+			d.sleep();*/
+
+			//Go to target
+			sprintf(&c[0],"c goto %.2f %.2f 0.25 %.2f",fTargetPosX,fTargetPosY, fYawAngle);	
 			s.data = c.c_str();
 			pthread_mutex_lock(&send_CS);
 			drone_pub.publish(s);
 			pthread_mutex_unlock(&send_CS);
-
-			d.sleep();
-			ROS_INFO("goto allocated pos!");//Inform user on the terminal
-
-			char buffer [50]; //NOTE for EDGAR; <---- check this !!!!! 
-			//Select passing point as starting point
-			if(iPassingPoint==1){ 
-				c = "c goto 0 2 0.5 0";
-				s.data = c.c_str();
-				drone_pub.publish(s);
-				d.sleep();
-				fTargetPosY = fTargetPosY - 2;		//Change coordinates to new origin
-				c=sprintf(buffer,"c goto 0 2 0.5 %.2f",fYawAngle);	//Turn towards target.
-				s.data = c.c_str();
-				drone_pub.publish(s);
-			}		
-			else {
-				c = "c goto -2 0 0.5 0";
-				s.data = c.c_str();
-				drone_pub.publish(s);
-				d.sleep();
-				fTargetPosX = fTargetPosX + 2;		//Change coordinates to new origin
-				c=sprintf(buffer,"c goto -2 0 0.5 %.2f",fYawAngle);	//Turn towards target.
-				s.data = c.c_str();
-				drone_pub.publish(s);
-			}
+			ROS_INFO("Goto: [%f][%f]", fTargetPosX, fTargetPosY);
 			
+			/*//Use for go to target test
 			d.sleep();
-
-			c=sprintf(buffer,"c goto %.2f %.2f 0.5 %.2f",fTargetPosX,fTargetPosY, fYawAngle);	//Move towards target
-			s.data = c.c_str();
-			drone_pub.publish(s);
 			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();*/
 			
-			/*Find pattern
-			while(NO_PATTERN_FOUND){
-				LOOk_FOR_PATTERN
-			}
-			*/
+			//Find pattern
+			//while(NO_PATTERN_FOUND){
+			//	LOOk_FOR_PATTERN
+			//}
+			
 
 			// Sending message to i90
 			//message.data = 1;
 			//drone_target_reached_pub.publish(message);
 			
 
-			//Return no passing point
-			if(iPassingPoint==1){ 
-				c = "c goto 0 2 0.5 0";
+			//Return to passing point
+			if(iPassingPoint == 2){ 
+				c = "c goto 0 1.5 0.25 0";
 				s.data = c.c_str();
 				drone_pub.publish(s);
-				d.sleep();
-				fTargetPosY = fTargetPosY - 2;		//Change coordinates to new origin
-				c=sprintf(buffer,"c goto 0 2 0.5 %.2f",fYawAngle);	//Turn towards target.
-				s.data = c.c_str();
-				drone_pub.publish(s);
+				ROS_INFO("goto 0 1.5!");//Inform user on the terminal
 			}		
 			else {
-				c = "c goto -2 0 0.5 0";
+				c = "c goto 1.5 0 0.25 0";
 				s.data = c.c_str();
 				drone_pub.publish(s);
-				d.sleep();
-				fTargetPosX = fTargetPosX + 2;		//Change coordinates to new origin
-				c=sprintf(buffer,"c goto -2 0 0.5 %.2f",fYawAngle);	//Turn towards target.
-				s.data = c.c_str();
-				drone_pub.publish(s);
+				ROS_INFO("goto 1.5 0!");//Inform user on the terminal
 			}
 
 			//Return origin
-			c = "c goto 0 0 0.5 0";						//Increase AR-drone altitude in order avoid ground obstacles (1.45m)
+			c = "c goto 0 0 0.25 0";						//Increase AR-drone altitude in order avoid ground obstacles (1.45m)
 			s.data = c.c_str();
 			drone_pub.publish(s);
+			ROS_INFO("goto origin!");//Inform user on the terminal
+
+
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
+			d.sleep();
 			d.sleep();
 			
 			//LAnd!!
@@ -218,15 +235,15 @@ void getTargetPos(const drone_movement::pos posReceived){
 	fTargetPosX = posReceived.fXPos;
 	fTargetPosY = posReceived.fYPos;
  	fYawAngle = posReceived.fYawAngle;	
-	iInitilizeFlag = 1;
-	float fPassingPoint1[2]={2,0},fPassingPoint2[2]={0,2};
+	float fPassingPoint1[2] = {2,0},fPassingPoint2[2] = {0,2};
   double dDistance1, dDistance2;
-  dDistance1=sqrt(((fPassingPoint1[0]-fTargetPosX)*(fPassingPoint1[0]-fTargetPosX))+((fPassingPoint1[1]-fTargetPosY)*(fPassingPoint1[1]-fTargetPosY)));
-  dDistance2=sqrt(((fPassingPoint2[0]-fTargetPosX)*(fPassingPoint2[0]-fTargetPosX))+((fPassingPoint2[1]-fTargetPosY)*(fPassingPoint2[1]-fTargetPosY)));
-  if(dDistance1<=dDistance2)
+  dDistance1=sqrt(((fPassingPoint1[0] - fTargetPosX) * (fPassingPoint1[0] - fTargetPosX)) + ((fPassingPoint1[1] - fTargetPosY) * (fPassingPoint1[1] - fTargetPosY)));
+  dDistance2 = sqrt(((fPassingPoint2[0] - fTargetPosX) * (fPassingPoint2[0]-fTargetPosX)) + ((fPassingPoint2[1] - fTargetPosY) * (fPassingPoint2[1] - fTargetPosY)));
+  if(dDistance1 <= dDistance2)
      iPassingPoint=1;
 	else
-		iPassingPoint=2;
+		 iPassingPoint=2;
+	iInitilizeFlag = 1;
 }
 
 /*Processes pattern recognition data read from /ardrone/navdata topic*/
